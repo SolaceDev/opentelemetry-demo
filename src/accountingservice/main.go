@@ -21,11 +21,18 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	sdkresource "go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"go.opentelemetry.io/otel/trace"
+	"solace.dev/go/messaging"
+	"solace.dev/go/messaging/pkg/solace/config"
+	"solace.dev/go/messaging/pkg/solace/message"
+	solaceresource "solace.dev/go/messaging/pkg/solace/resource"
 
 	"github.com/open-telemetry/opentelemetry-demo/src/accountingservice/kafka"
 )
 
 var log *logrus.Logger
+var tracer trace.Tracer
 var resource *sdkresource.Resource
 var initResourcesOnce sync.Once
 
@@ -73,6 +80,7 @@ func initTracerProvider() (*sdktrace.TracerProvider, error) {
 	)
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	tracer = tp.Tracer("accountingservice")
 	return tp, nil
 }
 
@@ -89,11 +97,71 @@ func main() {
 
 	var brokers string
 	mustMapEnv(&brokers, "KAFKA_SERVICE_ADDR")
+	var solaceBroker string
+	mustMapEnv(&solaceBroker, "SOLACE_SERVICE_ADDR")
 
 	brokerList := strings.Split(brokers, ",")
 	log.Printf("Kafka brokers: %s", strings.Join(brokerList, ", "))
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+
+	// Run solace receiver in another goroutine to not get blocked by kafka
+	go func() {
+		messagingService, err := messaging.NewMessagingServiceBuilder().FromConfigurationProvider(config.ServicePropertyMap{
+			config.TransportLayerPropertyHost:                solaceBroker,
+			config.ServicePropertyVPNName:                    "default",
+			config.AuthenticationPropertySchemeBasicUserName: "default",
+			config.AuthenticationPropertySchemeBasicPassword: "default",
+		}).Build()
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = messagingService.Connect()
+		if err != nil {
+			log.Fatal(err)
+		}
+		receiver, err := messagingService.CreatePersistentMessageReceiverBuilder().WithMessageAutoAcknowledgement().Build(solaceresource.QueueDurableExclusive("accounting-orders"))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		receiver.ReceiveAsync(func(inboundMessage message.InboundMessage) {
+			type tracingMessageSupport interface {
+				GetTransportTraceContext() (traceID [16]byte, spanID [8]byte, sampled bool, traceState string, ok bool)
+			}
+			msgTracingSupport, ok := inboundMessage.(tracingMessageSupport)
+			if ok {
+				traceID, spanID, _, _, ok := msgTracingSupport.GetTransportTraceContext()
+				if !ok {
+					log.Error("Message did not have trace ID")
+				}
+
+				ctx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{
+					TraceID:    traceID,
+					SpanID:     spanID,
+					Remote:     true,
+					TraceFlags: trace.FlagsSampled,
+				}))
+
+				_, span := tracer.Start(ctx, "solace go api receive", trace.WithSpanKind(trace.SpanKindConsumer), trace.WithAttributes(
+					semconv.MessagingSystem("solace"),
+					semconv.MessagingDestinationKindTopic,
+					semconv.MessagingDestinationName(inboundMessage.GetDestinationName()),
+					semconv.MessagingOperationReceive,
+				))
+
+				// do stuff with message
+
+				span.End()
+			}
+		})
+
+		err = receiver.Start()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+
 	defer cancel()
 	if err := kafka.StartConsumerGroup(ctx, brokerList, log); err != nil {
 		log.Fatal(err)

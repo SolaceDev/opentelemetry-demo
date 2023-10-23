@@ -41,6 +41,12 @@ your preferred deployment method:
 - [Docker](https://opentelemetry.io/docs/demo/docker_deployment/)
 - [Kubernetes](https://opentelemetry.io/docs/demo/kubernetes_deployment/)
 
+### Solace Setup
+- Add the `pubsubplus-go-client-otel` client with context propagation support to the `src/accountingservice` AND the `src/checkoutservice` directories
+- Build the accounting service microservice by running the following command `docker compose build accountingservice`
+- Build the checkout service microservice by running the following command `docker compose build checkoutservice`
+- Build all the microservices `docker compose up --no-build`
+
 ## Documentation
 
 For detailed documentation, see [Demo Documentation][docs]. If you're curious

@@ -15,6 +15,15 @@ import oteldemo.Demo.*
 import java.time.Duration.ofMillis
 import java.util.*
 import kotlin.system.exitProcess
+import kotlin.concurrent.thread
+
+import javax.jms.Message
+import javax.jms.MessageListener
+import javax.jms.BytesMessage
+
+import com.solacesystems.jms.SolConnectionFactory
+import com.solacesystems.jms.SolJmsUtility
+import com.solacesystems.jms.SupportedProperty
 
 const val topic = "orders"
 const val groupID = "frauddetectionservice"
@@ -31,9 +40,43 @@ fun main() {
         println("KAFKA_SERVICE_ADDR is not supplied")
         exitProcess(1)
     }
+    val solaceServers = System.getenv("SOLACE_SERVICE_ADDR")
+    if (solaceServers == null) {
+        println("SOLACE_SERVICE_ADDR is not supplied")
+        exitProcess(1)
+    }
     props[BOOTSTRAP_SERVERS_CONFIG] = bootstrapServers
     val consumer = KafkaConsumer<String, ByteArray>(props).apply {
         subscribe(listOf(topic))
+    }
+
+    thread {
+        val connectionFactory = SolJmsUtility.createConnectionFactory()
+        connectionFactory.setHost(solaceServers)
+        connectionFactory.setVPN("default")
+        connectionFactory.setUsername("default")
+        connectionFactory.setPassword("default")
+
+        val connection = connectionFactory.createConnection()
+        val session = connection.createSession(false, SupportedProperty.SOL_CLIENT_ACKNOWLEDGE)
+
+        val queue = session.createQueue("fraud-detection-orders")
+        val cons = session.createConsumer(queue)
+
+        val listener = object : MessageListener {
+            override fun onMessage(msg: Message) {
+                if (msg is BytesMessage) {
+                    val body = ByteArray(msg.getBodyLength().toInt())
+                    msg.readBytes(body)
+                    val orders = OrderResult.parseFrom(body)
+                    println("Consumed record with Solace with orderId: ${orders.orderId}")
+                }
+                msg.acknowledge()
+            }
+        }
+
+        cons.setMessageListener(listener)
+        connection.start()
     }
 
     var totalCount = 0L

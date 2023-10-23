@@ -15,6 +15,16 @@ receivers:
     targets:
       - endpoint: http://frontendproxy:${env:ENVOY_PORT}
 
+  solace:
+    broker: "solace:5672"
+    queue: "queue://#telemetry-demo"
+    max_unacknowledged: 500
+    tls:
+      insecure: true
+    auth:
+      sasl_plain:
+        username: "trace"
+        password: "trace"
 exporters:
   debug:
   otlp:
@@ -54,7 +64,7 @@ connectors:
 service:
   pipelines:
     traces:
-      receivers: [otlp]
+      receivers: [otlp, solace]
       processors: [batch]
       exporters: [otlp, debug, spanmetrics]
     metrics:

@@ -17,6 +17,7 @@ require (
 	google.golang.org/grpc v1.57.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 	google.golang.org/protobuf v1.31.0
+	solace.dev/go/messaging v1.4.0
 )
 
 require (
@@ -58,5 +59,7 @@ require (
 	golang.org/x/sys v0.11.0 // indirect
 	golang.org/x/text v0.12.0 // indirect
 )
+
+replace solace.dev/go/messaging => github.com/SolaceDev/pubsubplus-go-client v0.0.0-20231012020743-513edafdc223
 
 replace github.com/opentelemetry/opentelemetry-demo/src/productcatalogservice => ../productcatalogservice

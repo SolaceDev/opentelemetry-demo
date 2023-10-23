@@ -3,6 +3,9 @@
 
 
 FROM golang:1.19.2-alpine AS builder
+
+RUN apk add build-base
+
 WORKDIR /usr/src/app/
 
 COPY ./src/accountingservice/ ./

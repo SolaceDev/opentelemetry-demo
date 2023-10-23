@@ -42,6 +42,8 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-core:2.21.0")
     implementation("org.slf4j:slf4j-api:2.0.9")
     implementation("com.google.protobuf:protobuf-kotlin:${protobufVersion}")
+    implementation("com.solacesystems:sol-jms:10.19.0")
+    implementation("javax.jms:javax.jms-api:2.0.1")
 
     if (JavaVersion.current().isJava9Compatible) {
         // Workaround for @javax.annotation.Generated

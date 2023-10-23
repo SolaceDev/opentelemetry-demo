@@ -13,6 +13,7 @@ require (
 	google.golang.org/grpc v1.57.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 	google.golang.org/protobuf v1.31.0
+	solace.dev/go/messaging v1.4.0
 )
 
 require (
@@ -46,3 +47,5 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20230822172742-b8732ec3820d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230822172742-b8732ec3820d // indirect
 )
+
+replace solace.dev/go/messaging => github.com/SolaceDev/pubsubplus-go-client v0.0.0-20231012020743-513edafdc223

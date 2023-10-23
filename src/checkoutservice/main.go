@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	semconv "go.opentelemetry.io/otel/semconv/v1.19.0"
 	"net"
 	"net/http"
 	"os"
@@ -15,8 +14,14 @@ import (
 	"sync"
 	"time"
 
+	semconv "go.opentelemetry.io/otel/semconv/v1.19.0"
+
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"solace.dev/go/messaging"
+	"solace.dev/go/messaging/pkg/solace"
+	"solace.dev/go/messaging/pkg/solace/config"
+	solaceresource "solace.dev/go/messaging/pkg/solace/resource"
 
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
@@ -123,8 +128,11 @@ type checkoutService struct {
 	emailSvcAddr          string
 	paymentSvcAddr        string
 	kafkaBrokerSvcAddr    string
+	solaceBrokerSvcAddr   string
 	pb.UnimplementedCheckoutServiceServer
-	KafkaProducerClient sarama.AsyncProducer
+	KafkaProducerClient    sarama.AsyncProducer
+	solaceMessagingService solace.MessagingService
+	solacePublisher        solace.PersistentMessagePublisher
 }
 
 func main() {
@@ -160,6 +168,7 @@ func main() {
 	mustMapEnv(&svc.emailSvcAddr, "EMAIL_SERVICE_ADDR")
 	mustMapEnv(&svc.paymentSvcAddr, "PAYMENT_SERVICE_ADDR")
 	svc.kafkaBrokerSvcAddr = os.Getenv("KAFKA_SERVICE_ADDR")
+	mustMapEnv(&svc.solaceBrokerSvcAddr, "SOLACE_SERVICE_ADDR")
 
 	if svc.kafkaBrokerSvcAddr != "" {
 		svc.KafkaProducerClient, err = kafka.CreateKafkaProducer([]string{svc.kafkaBrokerSvcAddr}, log)
@@ -168,7 +177,27 @@ func main() {
 		}
 	}
 
-	log.Infof("service config: %+v", svc)
+	svc.solaceMessagingService, err = messaging.NewMessagingServiceBuilder().FromConfigurationProvider(config.ServicePropertyMap{
+		config.TransportLayerPropertyHost:                svc.solaceBrokerSvcAddr,
+		config.ServicePropertyVPNName:                    "default",
+		config.AuthenticationPropertySchemeBasicUserName: "default",
+		config.AuthenticationPropertySchemeBasicPassword: "default",
+	}).Build()
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = svc.solaceMessagingService.Connect()
+	if err != nil {
+		log.Fatal(err)
+	}
+	svc.solacePublisher, err = svc.solaceMessagingService.CreatePersistentMessagePublisherBuilder().Build()
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = svc.solacePublisher.Start()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
 	if err != nil {
@@ -500,6 +529,43 @@ func (cs *checkoutService) sendToPostProcessor(ctx context.Context, result *pb.O
 	cs.KafkaProducerClient.Input() <- &msg
 	successMsg := <-cs.KafkaProducerClient.Successes()
 	log.Infof("Successful to write message. offset: %v", successMsg.Offset)
+
+	// Manual instrumentation of Solace
+	attrs := []attribute.KeyValue{
+		semconv.MessagingSystem("solace"),
+		semconv.MessagingDestinationKindTopic,
+		semconv.MessagingDestinationName(msg.Topic),
+		semconv.MessagingMessagePayloadSizeBytes(len(message)),
+		semconv.MessagingOperationPublish,
+	}
+	opts := []trace.SpanStartOption{
+		trace.WithAttributes(attrs...),
+		trace.WithSpanKind(trace.SpanKindProducer),
+	}
+
+	_, span = tracer.Start(ctx, fmt.Sprintf("%s sol publish", msg.Topic), opts...)
+
+	solaceMsg, err := cs.solaceMessagingService.MessageBuilder().BuildWithByteArrayPayload(message, nil)
+	if err != nil {
+		log.Errorf("Failed to create solace msg: %+v", err)
+		return
+	}
+	type tracingBuilderSupport interface {
+		SetCreationTraceContext(traceID [16]byte, spanID [8]byte, sampled bool, traceState string) (ok bool)
+	}
+
+	if messageTrace, ok := solaceMsg.(tracingBuilderSupport); ok {
+		messageTrace.SetCreationTraceContext(span.SpanContext().TraceID(), span.SpanContext().SpanID(), true, "")
+	}
+
+	// build a dynamic topic with following hierarchy: orders/<order_id>/shipping/<shipping_country>/<shipping_state>/<shipping_city>/<shipping_tracking_id>
+	solaceTopic := solaceresource.TopicOf(fmt.Sprintf("orders/%s/shipping/%s/%s/%s/%s", result.OrderId, result.ShippingAddress.Country,
+		result.ShippingAddress.State, result.ShippingAddress.City, result.ShippingTrackingId))
+	err = cs.solacePublisher.PublishAwaitAcknowledgement(solaceMsg, solaceTopic, 10*time.Second, nil)
+	if err != nil {
+		span.SetStatus(1, err.Error())
+	}
+	span.End()
 }
 
 func createProducerSpan(ctx context.Context, msg *sarama.ProducerMessage) trace.Span {

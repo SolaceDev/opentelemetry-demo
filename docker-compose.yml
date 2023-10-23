@@ -37,6 +37,7 @@ services:
       - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
       - OTEL_RESOURCE_ATTRIBUTES
       - OTEL_SERVICE_NAME=accountingservice
+      - SOLACE_SERVICE_ADDR
     depends_on:
       otelcol:
         condition: service_started
@@ -132,6 +133,7 @@ services:
       - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
       - OTEL_RESOURCE_ATTRIBUTES
       - OTEL_SERVICE_NAME=checkoutservice
+      - SOLACE_SERVICE_ADDR
     depends_on:
       cartservice:
         condition: service_started
@@ -255,6 +257,7 @@ services:
       - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
       - OTEL_RESOURCE_ATTRIBUTES
       - OTEL_SERVICE_NAME=frauddetectionservice
+      - SOLACE_SERVICE_ADDR
     depends_on:
       otelcol:
         condition: service_started
@@ -345,6 +348,8 @@ services:
       - OTEL_COLLECTOR_PORT_GRPC
       - OTEL_COLLECTOR_PORT_HTTP
       - ENVOY_PORT
+      - SOLACE_WEB_HOST
+      - SOLACE_WEB_PORT
     depends_on:
       frontend:
         condition: service_started
@@ -601,6 +606,28 @@ services:
       - "${REDIS_PORT}"
     logging: *logging
 
+  # Solace
+  solace:
+    image: solace/solace-pubsub-standard:latest
+    container_name: solace-otel
+    hostname: solace
+    shm_size: 1g
+    ulimits:
+      core: -1
+      nofile:
+        soft: 2448
+        hard: 6592
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 1
+    environment:
+      - username_admin_globalaccesslevel=admin
+      - username_admin_password=admin
+      - system_scaling_maxconnectioncount=100
+    volumes:
+      - ./src/solace/update_run.sh:/usr/tmp/update_run.sh
+    command: /usr/tmp/update_run.sh
 
   # ********************
   # Telemetry Components
