@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: check out code
-      uses: actions/checkout@v3
+      uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26 # v3
 
     - name: install dependencies
       run: npm install
@@ -32,9 +32,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: check out code
-      uses: actions/checkout@v3
+      uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26 # v3
 
-    - uses: actions/setup-python@v4
+    - uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c # v4
       with:
         python-version: '3.x'
 
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: check out code
-      uses: actions/checkout@v3
+      uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26 # v3
 
     - name: run misspell
       run: make misspell
@@ -57,9 +57,9 @@ jobs:
     name: markdownlinkcheck
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26 # v3
     - name: Run link check
-      uses: gaurav-nelson/github-action-markdown-link-check@v1
+      uses: gaurav-nelson/github-action-markdown-link-check@5c5dfc0ac2e225883c0e5f03a85311ec2830d368 # v1
       with:
         use-quiet-mode: 'no'
         use-verbose-mode: 'yes'
@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26 # v3
 
     - name: run sanitycheck.py
       run: python3 ./internal/tools/sanitycheck.py
@@ -78,7 +78,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: check out code
-      uses: actions/checkout@v3
+      uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26 # v3
     - name: install tools
       run: make install-tools
     - name: run checklicense
