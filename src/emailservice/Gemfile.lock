@@ -4,6 +4,7 @@ GEM
     date (3.3.3)
     google-protobuf (3.23.4-aarch64-linux)
     google-protobuf (3.23.4-arm64-darwin)
+    google-protobuf (3.23.4-x86_64-linux)
     googleapis-common-protos-types (1.7.0)
       google-protobuf (~> 3.14)
     mail (2.8.1)
@@ -218,7 +219,7 @@ GEM
       mail (>= 2.0)
     puma (6.3.0)
       nio4r (~> 2.0)
-    rack (2.2.7)
+    rack (2.2.25)
     rack-protection (3.0.6)
       rack
     ruby2_keywords (0.0.5)
@@ -234,6 +235,7 @@ PLATFORMS
   aarch64-linux
   arm64-darwin-21
   arm64-darwin-22
+  x86_64-linux
 
 DEPENDENCIES
   net-smtp (~> 0.3)
